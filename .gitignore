@@ -31,3 +31,4 @@ frameworks/LLVM-CFI/source_code/include/llvm/*
 !frameworks/LLVM-CFI/source_code/include/llvm/Transforms/
 frameworks/LLVM-CFI/source_code/include/llvm/Transforms/*
 !frameworks/LLVM-CFI/source_code/include/llvm/Transforms/IPO/
+frameworks/LLVM-CFI/source_code/include/llvm/Transforms/IPO/*.gch
