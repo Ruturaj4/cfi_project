@@ -1,3 +1,5 @@
+# Copyright (c) University of Kansas and affiliates.
+
 import os
 
 def marx(binary):

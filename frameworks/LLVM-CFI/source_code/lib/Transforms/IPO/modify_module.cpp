@@ -29,7 +29,6 @@ public:
     }
 private:
     bool runOnModule(Module &M) override {
-      sdLog::stream() << "CAN YOU SEE THIS?" << "\n";
       return false;
     }
 };

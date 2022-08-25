@@ -1,3 +1,5 @@
+# Copyright (c) University of Kansas and affiliates.
+
 def encode(tif):
     # type: (idaapi.tinfo) -> int (encoded type)
 
@@ -15,16 +17,16 @@ def encode(tif):
         if tif.get_size() < 1:
             itype = 2
         # int8, char, bool
-        if tif.is_char() or tif.is_bool() or tif.get_size() == 1:
+        if tif.is_char() or tif.is_bool() or tif.get_size() <= 1:
             itype = 3
         # int16
-        elif tif.is_int16() or tif.get_size() == 2:
+        elif tif.is_int16() or tif.get_size() <= 2:
             itype = 4
         # int32
-        elif tif.is_int32() or tif.get_size() == 3:
+        elif tif.is_int32() or tif.get_size() <= 4:
             itype = 5
         # int64, int128
-        elif tif.is_int64() or tif.get_size() >= 4:
+        elif tif.is_int64() or tif.get_size() > 4:
             itype = 6
     # floating type
     elif tif.is_floating():

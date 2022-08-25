@@ -21,6 +21,9 @@
 #include <llvm/Support/Path.h>
 #include <fstream>
 #include <sstream>
+/** Ruturaj: use map and tuple to store input function information**/
+#include <unordered_map>
+#include <tuple>
 
 using namespace llvm;
 
@@ -54,6 +57,17 @@ static std::stringstream writeDebugLocToStream(const DebugLoc* Loc) {
     Stream << Scope->getFilename().str() + ":" << Loc->getLine() << ":" << Loc->getCol();
     return Stream;
 }
+
+/** Ruturaj: create structures to parse the input file **/
+
+struct Fun {
+public:
+
+};
+
+
+std::unordered_map <std::string, Fun> funs;
+
 
 /** Encodings contains the three relevant encodings */
 struct Encodings {
@@ -135,8 +149,9 @@ public:
         if (FuncTy->getNumParams() < 8) {
             if (encodeReturnType)
                 Encoding = encodeType(FuncTy->getReturnType(), encodePointers);
-
+            sdLog::stream() << "Return: " << Encoding << "\n";
             for (auto *Param : FuncTy->params()) {
+                sdLog::stream() << "param: " << encodeType(Param) << "\n";
                 Encoding = encodeType(Param) + Encoding * 32;
             }
         }
@@ -269,18 +284,20 @@ private:
     bool runOnModule(Module &M) override {
         sdLog::blankLine();
         sdLog::stream() << "P7a. Started running the SDAnalysis pass ..." << sdLog::newLine << "\n";
-        sdLog::stream() << sdLog::newLine << "this works ..." << "\n";
         // setup CHA info
         CHA = &getAnalysis<SDBuildCHA>();
-        myanalysis(M);
+        // myanalysis(M);
         analyseCHA();
         computeVTableIslands();
         findAllVFunctions();
 
+        // Ruturaj: store input metadata in a map structure
+        storeInput();
+
         // setup callee and callee signature info
         analyseCallees(M);
         // Ruturaj: clone setup callee and callee signature info function
-        analyseCalleesClone(M);
+        // analyseCalleesClone(M);
 
         // process the CallSites
         processVirtualCallSites(M);
@@ -303,13 +320,36 @@ private:
     {
       sdLog::stream() << "start alt analysis...\n";
       // print function names
-      for (auto &F : M) {
-        sdLog::stream() << "new function name: " << F.getName() << "\n";
-        sdLog::stream() << "no. of params: " << F.getFunctionType()->getNumParams() << "\n";
-        // the next goal is to try to change the function names
-
-      }
+      // for (auto &F : M) {
+      //   sdLog::stream() << "new function name: " << F.getName() << "\n";
+      //   sdLog::stream() << "no. of params: " << F.getFunctionType()->getNumParams() << "\n";
+      //   // the next goal is to try to change the function names
+      //
+      // }
       sdLog::stream() << "---------------- ********\n" ;
+    }
+
+
+    /** Ruturaj: store input metadata**/
+    void storeInput()
+    {
+      std::string line;
+      std::ifstream myfile;
+      myfile.open("demo.txt");
+      if (myfile.is_open())
+      {
+        getline(myfile,line);
+        int64_t count = atoi(line.c_str());
+        while (count)
+        {
+          getline (myfile,line);
+          funs[line] = Fun();
+          for (auto& it: funs)
+            sdLog::stream() << "func: \n" << it.first << "\n";
+          --count;
+        }
+      }
+      myfile.close();
     }
 
     /** hierarchy analysis functions */
@@ -488,9 +528,6 @@ private:
     /* Ruturaj: clone of analyseCallees function */
     void analyseCalleesClone(Module &M)
     {
-        std::ofstream myfile;
-        myfile.open ("demo.txt");
-        myfile.close();
         // sdLog::stream() << "\n";
         // sdLog::stream() << "Processing functions...\n";
         //
@@ -561,12 +598,15 @@ private:
                 NumOfParams = 7;
 
             auto Encode = Encodings::encode(F.getFunctionType());
+
             std::string FunctionName = F.getName();
 
             std::string DemangledFunctionName = FunctionName;
             // Ruturaj: print function names and args
             sdLog::stream() << DemangledFunctionName << "\n";
+            sdLog::stream() << "Encoding:= Normal:"<<Encode.Normal<<" Short:"<<Encode.Short << " Precise:"<< Encode.Precise << "\n";
             sdLog::stream() << F.getFunctionType()->getNumParams() << "\n";
+
             int Status = 0;
             if (F.getName().startswith("_")) {
                 auto DemangledPair = itaniumDemanglePair(F.getName(), Status);
@@ -612,15 +652,19 @@ private:
         sdLog::stream() << "\n";
         sdLog::stream() << "Processing indirect CallSites...\n";
         for (auto &F : M) {
+            sdLog::stream() << "Function: " << F.getName() << '\n';
             for(auto &MBB : F) {
                 for (auto &I : MBB) {
                     CallSite Call(&I);
                     // Try to use I as a CallInst or a InvokeInst
                     if (Call.getInstruction()) {
                         if (CallSite(Call).isIndirectCall() && VirtualCallSites.find(Call) == VirtualCallSites.end()) {
+                            sdLog::stream() << "Indirect callsite analysis!\n";
+                            sdLog::stream() << "Number of parameters:" << Call.getFunctionType()->getNumParams() << '\n';
                             CallSiteInfo Info(Call.getFunctionType()->getNumParams(), false);
                             analyseCall(Call, Info);
                             ++countIndirect;
+
                         }
                     }
                 }
@@ -710,7 +754,9 @@ private:
             Dwarf = Stream.str();
         }
         Info.Dwarf = Dwarf;
-
+        // Ruturaj: prints
+        sdLog::stream() << "################################################" << "\n";
+        sdLog::stream() << "Stream: " << Dwarf << "\n";
         auto NumberOfParam = CallSite.getFunctionType()->getNumParams();
         if (NumberOfParam >= 7)
             NumberOfParam = 7;
@@ -815,6 +861,7 @@ private:
                         << MetricFileNameVirtual << ", " << MetricFileNameIndirect << ".\n";
 
         writeMetricVirtual(OutfileMetricVirtual);
+        sdLog::stream() << "Write Metric Indirect!!!!!!!!!" << "\n";
         writeMetricIndirect(OutfileMetricIndirect);
     }
 
@@ -1054,6 +1101,7 @@ private:
             return;
 
         writeHeader(Out, false);
+        sdLog::stream() << "Write Metric Indirect!!!!!!!!!" << "\n";
 
         auto BaseLine = AllFunctions.size();
         auto BaseLineVirtual = AllVFunctions.size();
@@ -1064,6 +1112,7 @@ private:
             for (auto &Info : I->second) {
                 if (ExportedLines.find(Info.Dwarf) != ExportedLines.end())
                     continue;
+                sdLog::stream() << "Stream: " << Info.Dwarf << "\n";
 
                 ExportedLines.insert(Info.Dwarf);
                 Out << Info.Dwarf
