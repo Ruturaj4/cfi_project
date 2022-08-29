@@ -6,7 +6,7 @@ import function_info
 import marx_analysis
 import build_models
 
-# wait for auto-analysis to complete
+# Wait for auto-analysis to complete.
 idc.auto_wait()
 
 def save_data_text(metadata):
@@ -33,17 +33,17 @@ def save_data_json(metadata):
         json.dump(metadata, f)
 
 def main():
-    # collect functions
+    # Collect functions.
     metadata = function_info.function_iterator()
     # print("#### marx analysis ####")
-    # marx analysis
+    # Marx analysis.
     marx_analysis.marx(ida_nalt.get_input_file_path())
-    # bulid class hierarchy
+    # Bulid class hierarchy.
     # ida_cfi.CHA()
-    # build models
+    # Build models.
     build_models.build_analysis(metadata)
     # print(metadata)
-    # save files
+    # Save files.
     # save_data_json(metadata)
     # save_data_text(metadata)
 

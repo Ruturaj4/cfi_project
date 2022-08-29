@@ -21,7 +21,7 @@ class CallSiteInfo():
         self.PreciseName = _PreciseName
         self.DisplayName = ""
         self.Dwarf = ""
-        # todo: add encodings
+        # TODO: Add encodings.
         self.TargetSignatureMatches = -1;
         self.ShortTargetSignatureMatches = -1;
         self.PreciseTargetSignatureMatches= -1;
@@ -36,30 +36,30 @@ class CallSiteInfo():
         self.PreciseSubHierarchyMatches = -1;
         self.HierarchyIslandMatches = -1;
 
-# model data structures
+# Model data structures.
 
-#counts analysed CallSites
+# Counts analysed CallSites.
 CallSiteCount = 0
-# info for every analysed CallSite
+# Info for every analysed CallSite.
 Data = []
 
-# metric results (used for sorting CallSiteInfo)
-# todo: virtual metric
+# Metric results (used for sorting CallSiteInfo).
+# TODO: virtual metric
 MetricIndirect = collections.defaultdict(list)
 
-# baseline
+# Baseline.
 AllFunctions = set()
-# baseline v funcions
+# Baseline v funcions.
 AllVFunctions = set()
 
-# function type matching data
+# Function type matching data.
 PreciseTargetSignature = collections.defaultdict(set)
 TargetSignature = collections.defaultdict(set)
 ShortTargetSignature = collections.defaultdict(set)
 NumberOfParameters = [0]*8
 NumberOfParametersList = [set() for _ in range(8)]
 
-# Encodings contains the three relevant encodings
+# Encodings contains the three relevant encodings.
 class Encodings:
     def __init__(self, _Normal, _Short, _Precise):
         self.Normal = _Normal
@@ -68,7 +68,7 @@ class Encodings:
 
     @ staticmethod
     def encodeFunction(param_list, return_t, encodePointers, encodeReturnType=True):
-        # base encoding
+        # Base encoding.
         Encoding = 32
         if len(param_list) < 8:
             if encodeReturnType:
@@ -94,24 +94,24 @@ def demangle_func_name(mangled_name, clean=True):
     demangle_attr = idc.get_inf_attr(idc.INF_SHORT_DN if clean else idc.INF_LONG_DN)
     return idc.demangle_name(mangled_name, demangle_attr)
 
-# function type matching functions
+# Function type matching functions.
 def analyseCallees(metadata: dict) -> None:
     print("Processing functions...")
     for function in metadata:
         print(function)
-        # get number of parameter
+        # Get number of parameters.
         NumOfParams = len(metadata[function]["parameter_list"])
         if NumOfParams > 7: NumOfParams = 7
 
-        # encode the function
+        # Encode the function.
         # print(metadata[function])
         Encode = Encodings.encode(metadata[function]["parameter_list"], metadata[function]["return_t"])
 
-        # demangle the function name
+        # Demangle the function name.
         demangled_name = demangle_func_name(function)
         demangled_name = demangled_name if demangled_name else function
 
-        # fill the data structures
+        # Fill the data structures.
         AllFunctions.add(function)
         NumberOfParameters[NumOfParams] += 1
         NumberOfParametersList[NumOfParams].add(function)
@@ -119,10 +119,10 @@ def analyseCallees(metadata: dict) -> None:
         ShortTargetSignature[Encode.Short].add(function)
         PreciseTargetSignature[(demangled_name, Encode.Precise)].add(function)
 
-        # fill the data structures if the function is virtual
-        # todo: add this to support c++
+        # Fill the data structures if the function is virtual.
+        # TODO: add this to support c++
 
-# function type
+# Function type.
 def analyseCall(function: str, callsite: tuple, Info: CallSiteInfo) -> None:
 
     global CallSiteCount
@@ -143,12 +143,12 @@ def analyseCall(function: str, callsite: tuple, Info: CallSiteInfo) -> None:
     for i in range(NumberOfParam):
         Info.NumberOfParamMatches += NumberOfParameters[i]
 
-    # todo: for virtual signatures
+    # TODO: For virtual signatures.
 
-    # todo: for virtual parameters
+    # TODO: For virtual parameters.
 
     if Info.isVirtual:
-        # todo: implement this
+        # TODO: Implement analysis for virtual functions.
         pass
     else:
         Info.DisplayName = function
@@ -168,14 +168,14 @@ def processIndirectCallSites(metadata: dict) -> None:
 def processVirtualCallSites():
     pass
 
-# Helper Functions
+# Helper Functions.
 
 def applyCallSiteMetric() -> None:
     for entry in Data:
         if entry.isVirtual:
             pass
         else:
-            # todo: does rounding make sense?
+            # TODO: does rounding make sense?
             # metric = round(entry.TargetSignatureMatches / len(AllFunctions), 4)
             metric = entry.TargetSignatureMatches / len(AllFunctions)
             MetricIndirect[metric].append(entry)
@@ -243,7 +243,7 @@ def writeMetricIndirect(indirectfilemetric) -> None:
                 IFCC = TargetSignature[Info.Encoding.Normal]
                 IFCCSafe = ShortTargetSignature[Info.Encoding.Normal]
 
-                # todo: fix accordingly
+                # TODO: fix accordingly
                 writer.writerow([Info.Dwarf,Info.DisplayName, "", "", Info.Params, "", "", \
                 Info.TargetSignatureMatches, Info.ShortTargetSignatureMatches, Info.NumberOfParamMatches,\
                 len(AllFunctions), "", "", "", "", "", "", \
@@ -253,8 +253,8 @@ def writeMetricIndirect(indirectfilemetric) -> None:
                 i += 1
             if i > 50: break
 
-# write the data in file (along with the metric data)
-# this function can be used to co-relate and then display the data
+# Write the data in file (along with the metric data).
+# This function can be used to co-relate and then display the data.
 def storeData() -> None:
     if not Data:
         print("Nothing to store...")
@@ -274,19 +274,19 @@ def storeData() -> None:
 def build_analysis(metadata):
     print("P7a. Started running the SDAnalysis pass ...")
 
-    # setup CHA info
+    # Setup CHA info.
 
-    # setup callee and callee signature info
+    # Setup callee and callee signature info.
     analyseCallees(metadata)
 
-    # process the CallSites
-    # process virtual callsites
+    # Process the CallSites.
+    # Process virtual CallSites.
     processVirtualCallSites()
-    # process indirect callsites
+    # Process indirect CallSites.
     processIndirectCallSites(metadata)
     print(f"Total number of CallSites: {CallSiteCount}")
 
-    # apply the metric to the CallSiteInfo's in order to sort them
+    # Apply the metric to the CallSiteInfo's in order to sort them.
     applyCallSiteMetric()
-    # store the analysis data
+    # Store the analysis data.
     storeData()
