@@ -19,11 +19,11 @@ def addr2line(bin, ida_anal) -> pd.core.frame.DataFrame:
     return ida_anal
 
 def clean_df(df) -> pd.core.frame.DataFrame:
-    # remove second header
+    # Remove second header.
     df.columns = df.columns.droplevel(-1)
-    # drop nan columns
+    # Drop nan columns.
     df.dropna(how='all', axis=1, inplace=True)
-    # drop columns with 0 values
+    # Drop columns with 0 values.
     df = df.loc[:, (df != 0).any(axis=0)]
     return df
 
@@ -36,13 +36,13 @@ def main():
     bin = parser.parse_args().bin
     ida_anal = pd.read_csv("IDAoutput/" + bin + "-Indirect.csv", header=[0,1])
     llvm_anal = pd.read_csv("SDOutput/" + bin + "-Indirect.csv", header=[0,1])
-    # add ida suffix
+    # Add ida suffix.
     ida_anal = ida_anal.add_suffix('_ida')
-    # use addr2line to get dwarf information
+    # Use addr2line to get dwarf information.
     ida_anal = addr2line(bin, ida_anal)
     llvm_anal = clean_df(llvm_anal)
     ida_anal = clean_df(ida_anal)
-    # remove column values from "Dwarf" in llvm df
+    # Remove column values from "Dwarf" in llvm df.
     llvm_anal["Dwarf"] = llvm_anal["Dwarf"].apply(convert_dwarf)
     llvm_anal = llvm_anal.drop_duplicates(subset=["Dwarf"])
     ida_anal = ida_anal.drop_duplicates(subset=["Dwarf"])

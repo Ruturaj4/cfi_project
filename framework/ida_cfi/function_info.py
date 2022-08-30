@@ -4,16 +4,17 @@ from ida_imports import *
 import type_encodings
 import sys
 import os
-import re
 
 # Store all metadata.
 # function: metadata
 metadata = {}
 
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
+
 # Use typearmor to get argument counts at callsites.
 callsites = {}
 def get_argument_count_typearmor() -> None:
-    # type: () -> None
     path, file = os.path.split(ida_nalt.get_input_file_path())
     with open(os.path.join(os.path.join(path, "out"), "binfo."+file), "r") as f:
         Flag = False
@@ -25,8 +26,9 @@ def get_argument_count_typearmor() -> None:
                 callsite = line.split()
                 callsites[callsite[0]] = [int(callsite[2]), False]
 
-def resolve_type(tif) -> tuple:
-    ## type: (idaapi.tinfo) -> int,int (type, basetype)
+
+def resolve_type(tif: idaapi.tinfo_t) -> tuple:
+    # tuple -> int,int (type, basetype)
 
     # Get pointer base type.
     ptif= tif.get_pointed_object()
@@ -36,26 +38,28 @@ def resolve_type(tif) -> tuple:
     basetype = realtype
     if realtype == 11:
         basetype = type_encodings.encode(ptif)
+
     return realtype, basetype
 
-def get_function_parameters(funcdata, decomp=False) -> list:
-    # type: (list, bool) -> list
 
+def get_function_parameters(funcdata: list, decomp=False) -> list:
+    # list -> List of tuples of parameter type information.
+    
     parameter_list = []
     for i,v in enumerate(funcdata):
         # itype = ida_typeinf.print_tinfo('', 0, 0, idc.PRTYPE_1LINE, v.type, '', '')
         paramter_type = resolve_type(v.tif) if decomp else resolve_type(v.type)
-        if not v.name: vname = "noname"
         parameter_list.append(tuple([i, v.name, paramter_type]))
         # print(f"Para {i}: {v.name} (of type {itype} and of location: {v.argloc.atype()})")
     return parameter_list
 
-def get_function_info_decompiler(ea, function) -> None:
-    # type: (int, str) ->  None
+
+def get_function_info_decompiler(ea: int, function: str) -> None:
 
     try:
         decompiled = ida_hexrays.decompile(ea)
     except ida_hexrays.DecompilationFailure:
+        eprint(f"Failed to Decompile function: {function}")
         return
 
     func_tinfo = idaapi.tinfo_t()
@@ -66,13 +70,14 @@ def get_function_info_decompiler(ea, function) -> None:
     # For. e.g. for char * -> (pointer, char).
     # The types are returned in encoded format.
     function_type = resolve_type(func_tinfo.get_rettype())
+    
     metadata[function]["return_t"] = function_type
     # Resolve function parameters' type.
-    # max_size = sys.maxsize*2+1
     metadata[function]["parameter_list"] = get_function_parameters(decompiled.arguments, True)
 
-def retrieve_function_data(ea) -> tuple:
-    ## type: (int) -> idaapi.tinfo, ida_typeinf.func_type_data_t
+
+def retrieve_function_data(ea: int) -> tuple:
+    ## tuple -> idaapi.tinfo, ida_typeinf.func_type_data_t
 
     # Get function type info.
     func_tinfo = idaapi.tinfo_t()
@@ -80,20 +85,16 @@ def retrieve_function_data(ea) -> tuple:
 
     # Return None if tinfo output is false.
     if not func_tinfo: return None, None
+
+    # Get function details gathered by IDA.
     funcdata = ida_typeinf.func_type_data_t()
     func_tinfo.get_func_details(funcdata)
+
     return func_tinfo, funcdata
 
-    ######### Retrieve return data using func_type_data_t.
-    # function_details = idaapi.func_type_data_t()
-    # func_tinfo.get_func_details(function_details)
-    # return if fuction data is not available
-    # if not func_tinfo.get_func_details(funcdata):
-    #     return None
-    # resolve_type(function_details.rettype)
 
-def get_function_info(function, func_tinfo, funcdata) -> None:
-    # type: (str, tinfo, func_type_data_t) -> None
+def get_function_info(function: str, func_tinfo: idaapi.tinfo_t, \
+    funcdata: ida_typeinf.func_type_data_t) -> None:
     # Resolve function return type.
     # This returns a tuple -> (type, basetype).
     # For. e.g. for char * -> (pointer, char).
@@ -105,10 +106,10 @@ def get_function_info(function, func_tinfo, funcdata) -> None:
     # max_size = sys.maxsize*2+1
     metadata[function]["parameter_list"] = get_function_parameters(funcdata)
 
+
 # Callsite extractor.
 # Extract argument type, return type.
-def callsite_extractor(ea, function) -> None:
-    # type: (str, int) -> None
+def callsite_extractor(ea: str, function: int) -> None:
 
     metadata[function]["indirect_calls"] = []
     metadata[function]["indirect_calls_hx"] = []
@@ -155,9 +156,9 @@ def callsite_extractor(ea, function) -> None:
     cbv = cblock_visitor_t()
     cbv.apply_to(cfunc.body, None)
 
+
 # TODO: unused.
-def bb_interator(ea, function) -> None:
-    # type: (int, str) -> None
+def bb_interator(ea: int) -> None:
     flowchart = idaapi.FlowChart(idaapi.get_func(ea))
     for bb in flowchart:
         ins = bb.start_ea
@@ -167,11 +168,10 @@ def bb_interator(ea, function) -> None:
 
 
 def function_iterator() -> dict:
-    # type: () -> dict
-
     # First recover callsite info from typearmor.
-    print("recovering argument count from typearmor....")
+    print("Recovering argument count from typearmor....")
     # get_argument_count_typearmor()
+
     ignore_funs = {"_start", "frame_dummy", "deregister_tm_clones", "fini"}
     ida_hexrays.init_hexrays_plugin()
     for ea in idautils.Functions():
@@ -186,12 +186,14 @@ def function_iterator() -> dict:
 
         # Retrieve function data.
         func_tinfo, funcdata = retrieve_function_data(ea)
-        # if not funcdata: continue
+        if not funcdata: continue
+
         # Store function.
         metadata[function] = {}
 
         # Get function parameters and return type.
         get_function_info(function, func_tinfo, funcdata)
+
         # This improves the function information we
         # get when the decompiler is active.
         get_function_info_decompiler(ea, function)

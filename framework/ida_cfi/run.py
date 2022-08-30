@@ -33,17 +33,17 @@ def save_data_json(metadata):
         json.dump(metadata, f)
 
 def main():
-    # Collect functions.
+    # Interate through functions and collect analysis data.
     metadata = function_info.function_iterator()
-    # print("#### marx analysis ####")
-    # Marx analysis.
+    
+    # Recover class hierarchy infomration.
     marx_analysis.marx(ida_nalt.get_input_file_path())
+
     # Bulid class hierarchy.
     # ida_cfi.CHA()
     # Build models.
     build_models.build_analysis(metadata)
-    # print(metadata)
-    # Save files.
+
     # save_data_json(metadata)
     # save_data_text(metadata)
 
