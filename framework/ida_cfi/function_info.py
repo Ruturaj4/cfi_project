@@ -59,7 +59,7 @@ def get_function_info_decompiler(ea: int, function: str) -> None:
     try:
         decompiled = ida_hexrays.decompile(ea)
     except ida_hexrays.DecompilationFailure:
-        eprint(f"Failed to Decompile function: {function}")
+        eprint(f"[ERR] Failed to Decompile function: {function}")
         return
 
     func_tinfo = idaapi.tinfo_t()
@@ -117,8 +117,8 @@ def callsite_extractor(ea: str, function: int) -> None:
         cfunc = ida_hexrays.decompile(ea)
     except ida_hexrays.DecompilationFailure:
         return
-    class cblock_visitor_t(ida_hexrays.ctree_visitor_t):
-
+    
+    class CblockVisitor(ida_hexrays.ctree_visitor_t):
         def __init__(self):
             ida_hexrays.ctree_visitor_t.__init__(self, ida_hexrays.CV_PARENTS)
 
@@ -153,7 +153,7 @@ def callsite_extractor(ea: str, function: int) -> None:
                             print(f"Instruction {hex(expr.ea)} Not Found in TypeArmor!")
                             metadata[function]["indirect_calls"].append((expr.ea, 0))
             return 0
-    cbv = cblock_visitor_t()
+    cbv = CblockVisitor()
     cbv.apply_to(cfunc.body, None)
 
 

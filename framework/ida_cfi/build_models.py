@@ -1,9 +1,15 @@
 # Copyright (c) University of Kansas and affiliates.
+# Most of the naming conventions are according to the original
+# llvm-cfi project.
 
 from ida_imports import *
 import collections
 import os
 import csv
+import sys
+
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
 
 # /** CallSiteInfo encapsulates all analysis data for a single CallSite.
 #      *  Iff isVirtual == false:
@@ -12,7 +18,6 @@ import csv
 #      *    will not contain meaningful data.
 #      * */
 class CallSiteInfo():
-
     def __init__(self, _Params, _isVirtual=False,_FunctionName="", _ClassName="", _PreciseName=""):
         self.Params = _Params
         self.isVirtual = _isVirtual
@@ -44,7 +49,7 @@ CallSiteCount = 0
 Data = []
 
 # Metric results (used for sorting CallSiteInfo).
-# TODO: virtual metric
+# TODO: virtual metric.
 MetricIndirect = collections.defaultdict(list)
 
 # Baseline.
@@ -96,15 +101,14 @@ def demangle_func_name(mangled_name, clean=True):
 
 # Function type matching functions.
 def analyseCallees(metadata: dict) -> None:
-    print("Processing functions...")
+    eprint("[SD] Processing functions...")
     for function in metadata:
-        print(function)
+        eprint(function)
         # Get number of parameters.
         NumOfParams = len(metadata[function]["parameter_list"])
         if NumOfParams > 7: NumOfParams = 7
 
         # Encode the function.
-        # print(metadata[function])
         Encode = Encodings.encode(metadata[function]["parameter_list"], metadata[function]["return_t"])
 
         # Demangle the function name.
@@ -157,13 +161,13 @@ def analyseCall(function: str, callsite: tuple, Info: CallSiteInfo) -> None:
 
 def processIndirectCallSites(metadata: dict) -> None:
     countIndirect = 0
-    print("Processing indirect CallSites...")
+    eprint("[SD] Processing indirect CallSites...")
     for function,data in metadata.items():
         for callsite in data["indirect_calls_hx"]:
             Info = CallSiteInfo(len(callsite[2]))
             analyseCall(function, callsite, Info)
             countIndirect += 1
-    print(f"Found indirect CallSites: {countIndirect}")
+    eprint(f"[SD] Found indirect CallSites: {countIndirect}")
 
 def processVirtualCallSites():
     pass
@@ -257,9 +261,9 @@ def writeMetricIndirect(indirectfilemetric) -> None:
 # This function can be used to co-relate and then display the data.
 def storeData() -> None:
     if not Data:
-        print("Nothing to store...")
+        eprint("[SD] Nothing to store...")
         return
-    print(f"Store all CallSites for Module: {ida_nalt.get_input_file_path()}")
+    eprint(f"[SD] Store all CallSites for Module: {ida_nalt.get_input_file_path()}")
 
     path, file = os.path.split(ida_nalt.get_input_file_path())
     idaoutput = os.path.join(path, "IDAoutput")
@@ -271,8 +275,8 @@ def storeData() -> None:
     writeMetricIndirect(indirectfilemetric)
 
 
-def build_analysis(metadata):
-    print("P7a. Started running the SDAnalysis pass ...")
+def build_analysis(metadata: dict) -> None:
+    eprint("[SD] P7a. Started running the SDAnalysis pass ...")
 
     # Setup CHA info.
 
@@ -284,7 +288,7 @@ def build_analysis(metadata):
     processVirtualCallSites()
     # Process indirect CallSites.
     processIndirectCallSites(metadata)
-    print(f"Total number of CallSites: {CallSiteCount}")
+    eprint(f"[SD] Total number of CallSites: {CallSiteCount}")
 
     # Apply the metric to the CallSiteInfo's in order to sort them.
     applyCallSiteMetric()
