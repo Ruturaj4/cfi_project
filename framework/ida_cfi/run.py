@@ -45,7 +45,7 @@ def main():
     build_models.build_analysis(metadata)
 
     # save_data_json(metadata)
-    # save_data_text(metadata)
+    save_data_text(metadata)
 
 if  __name__ == '__main__':
     main()

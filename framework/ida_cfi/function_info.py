@@ -12,6 +12,7 @@ metadata = {}
 def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
+
 # Use typearmor to get argument counts at callsites.
 callsites = {}
 def get_argument_count_typearmor() -> None:
@@ -44,13 +45,13 @@ def resolve_type(tif: idaapi.tinfo_t) -> tuple:
 
 def get_function_parameters(funcdata: list, decomp=False) -> list:
     # list -> List of tuples of parameter type information.
-    
     parameter_list = []
     for i,v in enumerate(funcdata):
         # itype = ida_typeinf.print_tinfo('', 0, 0, idc.PRTYPE_1LINE, v.type, '', '')
         paramter_type = resolve_type(v.tif) if decomp else resolve_type(v.type)
         parameter_list.append(tuple([i, v.name, paramter_type]))
         # print(f"Para {i}: {v.name} (of type {itype} and of location: {v.argloc.atype()})")
+    # eprint(parameter_list)
     return parameter_list
 
 
@@ -127,15 +128,9 @@ def callsite_extractor(ea: str, function: int) -> None:
                 if idc.get_operand_type(expr.ea, 0) not in {idc.o_imm, idc.o_far, idc.o_near}:
                     decode = idautils.DecodeInstruction(expr.ea)
                     # Only check for call instructions.
-                    # if any(x in disasm for x in {"jmp", "call"}):
-                    if decode and decode.get_canon_mnem() in ["call", "jmp"]:
-                        # Return if the address targets to the code section.
-                        # This removes instructions which use rip addressing.
-                        if "cs:" in (idc.print_operand(expr.ea,0)): return 0
-                        print(hex(expr.ea))
-                        print(idc.GetDisasm(expr.ea))
-                        print(function)
-                        # print(ida_lines.tag_remove(ida_ua.print_operand(expr.ea, 0)))
+                    if decode and decode.get_canon_mnem() in ["call"]:
+                        # eprint(hex(expr.ea))
+                        # eprint(idc.GetDisasm(expr.ea))
                         callsite_arguments = []
                         # Get callsite arguments and their types.
                         for index, arg in enumerate(expr.a):
@@ -143,14 +138,13 @@ def callsite_extractor(ea: str, function: int) -> None:
                             callsite_arguments.append(tuple([index, "default", resolve_type(arg.type)]))
                         callsite_return_type = resolve_type(expr.type)
                         metadata[function]["indirect_calls_hx"].append((expr.ea,callsite_return_type, callsite_arguments))
-                        # print(expr.x.string)
                         # Get argument count from typearmor callsites.
                         if hex(expr.ea) in callsites:
                             callsites[hex(expr.ea)][1] = True
                             metadata[function]["indirect_calls"].append((expr.ea, callsites[hex(expr.ea)][0]))
                         else:
                             # Assign 0 call arguments if not detected by typearmor.
-                            print(f"Instruction {hex(expr.ea)} Not Found in TypeArmor!")
+                            # eprint(f"Instruction {hex(expr.ea)} Not Found in TypeArmor!")
                             metadata[function]["indirect_calls"].append((expr.ea, 0))
             return 0
     cbv = CblockVisitor()
@@ -169,10 +163,10 @@ def bb_interator(ea: int) -> None:
 
 def function_iterator() -> dict:
     # First recover callsite info from typearmor.
-    print("Recovering argument count from typearmor....")
+    eprint("Recovering argument count from typearmor....")
     # get_argument_count_typearmor()
 
-    ignore_funs = {"_start", "frame_dummy", "deregister_tm_clones", "fini"}
+    # ignore_funs = {"_start", "frame_dummy", "deregister_tm_clones", "fini"}
     ida_hexrays.init_hexrays_plugin()
     for ea in idautils.Functions():
         # Ignore function if not in text section.
@@ -182,15 +176,14 @@ def function_iterator() -> dict:
         # Ingore unnecessary funs.
         if function.startswith("."): continue
         if function.startswith("__"): continue
-        if function in ignore_funs: continue
 
         # Retrieve function data.
         func_tinfo, funcdata = retrieve_function_data(ea)
-        if not funcdata: continue
+        if not func_tinfo: continue
 
         # Store function.
         metadata[function] = {}
-
+        # eprint(function)
         # Get function parameters and return type.
         get_function_info(function, func_tinfo, funcdata)
 
@@ -205,5 +198,4 @@ def function_iterator() -> dict:
     # typearmour false negatives.
     # for key, val in callsites.items():
     #     if val[1] == False: print(f"key: {key}")
-    # print(metadata)
     return metadata

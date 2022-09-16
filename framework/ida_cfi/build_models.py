@@ -103,9 +103,11 @@ def demangle_func_name(mangled_name, clean=True):
 def analyseCallees(metadata: dict) -> None:
     eprint("[SD] Processing functions...")
     for function in metadata:
-        eprint(function)
+        # eprint(function)
         # Get number of parameters.
         NumOfParams = len(metadata[function]["parameter_list"])
+        # eprint(metadata[function]["parameter_list"])
+        # eprint(f"Number of par: {NumOfParams}")
         if NumOfParams > 7: NumOfParams = 7
 
         # Encode the function.
@@ -144,7 +146,7 @@ def analyseCall(function: str, callsite: tuple, Info: CallSiteInfo) -> None:
     Info.ShortTargetSignatureMatches = len(ShortTargetSignature[Encode.Short])
 
     Info.NumberOfParamMatches = 0
-    for i in range(NumberOfParam):
+    for i in range(NumberOfParam+1):
         Info.NumberOfParamMatches += NumberOfParameters[i]
 
     # TODO: For virtual signatures.
@@ -269,9 +271,9 @@ def storeData() -> None:
     idaoutput = os.path.join(path, "IDAoutput")
     if not os.path.exists(idaoutput):
         os.makedirs(idaoutput)
-    indirectfile = os.path.join(idaoutput, os.path.splitext(file)[0]) + "-Indirect.csv"
+    indirectfile = os.path.join(idaoutput, file) + "-Indirect.csv"
     writeAnalysisData(Data, indirectfile)
-    indirectfilemetric = os.path.join(idaoutput, os.path.splitext(file)[0]) + "-Indirect-metric.csv"
+    indirectfilemetric = os.path.join(idaoutput, file) + "-Indirect-metric.csv"
     writeMetricIndirect(indirectfilemetric)
 
 
