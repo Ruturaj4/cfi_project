@@ -6,11 +6,19 @@ import sys
 import os
 
 # Store all metadata.
-# function: metadata
+# function: {metadata}
 metadata = {}
 
 def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
+
+
+def decompile_function(ea) -> ida_hexrays.cfuncptr_t:
+    # Instead of throwing an exception on `DecompilationFailure` it just returns `None`.
+    try:
+        return ida_hexrays.decompile(ea)
+    except ida_hexrays.DecompilationFailure:
+        return None
 
 
 # Use typearmor to get argument counts at callsites.
@@ -55,14 +63,7 @@ def get_function_parameters(funcdata: list, decomp=False) -> list:
     return parameter_list
 
 
-def get_function_info_decompiler(ea: int, function: str) -> None:
-
-    try:
-        decompiled = ida_hexrays.decompile(ea)
-    except ida_hexrays.DecompilationFailure:
-        eprint(f"[ERR] Failed to Decompile function: {function}")
-        return
-
+def get_function_info_decompiler(ea: int, function: str, decompiled: ida_hexrays.cfuncptr_t) -> None:
     func_tinfo = idaapi.tinfo_t()
     decompiled.get_func_type(func_tinfo)
 
@@ -108,15 +109,30 @@ def get_function_info(function: str, func_tinfo: idaapi.tinfo_t, \
     metadata[function]["parameter_list"] = get_function_parameters(funcdata)
 
 
+
+# TODO: Implement this for functions which give decompiler error.
+def bb_interator(ea: int) -> None:
+    flowchart = idaapi.FlowChart(idaapi.get_func(ea))
+    for bb in flowchart:
+        ins = bb.start_ea
+        while ins < bb.end_ea:
+            if idc.get_operand_type(ins, 0) not in {idc.o_imm, idc.o_far, idc.o_near}:
+                    decode = idautils.DecodeInstruction(ins)
+                    # Only check for call instructions.
+                    if decode and decode.get_canon_mnem() in ["call"]:
+                        pass
+            ins = idc.next_head(ins)
+            
+
 # Callsite extractor.
 # Extract argument type, return type.
-def callsite_extractor(ea: str, function: int) -> None:
-
+def callsite_extractor(ea: int, function: str, decompiled: ida_hexrays.cfuncptr_t) -> None:
     metadata[function]["indirect_calls"] = []
     metadata[function]["indirect_calls_hx"] = []
-    try:
-        cfunc = ida_hexrays.decompile(ea)
-    except ida_hexrays.DecompilationFailure:
+    
+    # In case of decompilation failure, fall back to disassembly parsing.
+    if not decompiled:
+        # bb_interator(ea)
         return
     
     class CblockVisitor(ida_hexrays.ctree_visitor_t):
@@ -125,12 +141,13 @@ def callsite_extractor(ea: str, function: int) -> None:
 
         def visit_expr(self, expr):
             if expr.op == ida_hexrays.cot_call:
+                # o_imm      = ida_ua.o_imm       # Immediate Value                      value
+                # o_far      = ida_ua.o_far       # Immediate Far Address  (CODE)        addr
+                # o_near     = ida_ua.o_near      # Immediate Near Address (CODE)        addr
                 if idc.get_operand_type(expr.ea, 0) not in {idc.o_imm, idc.o_far, idc.o_near}:
                     decode = idautils.DecodeInstruction(expr.ea)
                     # Only check for call instructions.
                     if decode and decode.get_canon_mnem() in ["call"]:
-                        # eprint(hex(expr.ea))
-                        # eprint(idc.GetDisasm(expr.ea))
                         callsite_arguments = []
                         # Get callsite arguments and their types.
                         for index, arg in enumerate(expr.a):
@@ -148,17 +165,7 @@ def callsite_extractor(ea: str, function: int) -> None:
                             metadata[function]["indirect_calls"].append((expr.ea, 0))
             return 0
     cbv = CblockVisitor()
-    cbv.apply_to(cfunc.body, None)
-
-
-# TODO: unused.
-def bb_interator(ea: int) -> None:
-    flowchart = idaapi.FlowChart(idaapi.get_func(ea))
-    for bb in flowchart:
-        ins = bb.start_ea
-        while ins < bb.end_ea:
-            cmd = idc.GetDisasm(ins)
-            ins = idc.next_head(ins)
+    cbv.apply_to(decompiled.body, None)
 
 
 def function_iterator() -> dict:
@@ -173,6 +180,7 @@ def function_iterator() -> dict:
         # if not idc.get_segm_name(ea) == ".text":
         #     continue
         function = idc.get_func_name(ea)
+        
         # Ingore unnecessary funs.
         if function.startswith("."): continue
         if function.startswith("__"): continue
@@ -180,21 +188,25 @@ def function_iterator() -> dict:
         # Retrieve function data.
         func_tinfo, funcdata = retrieve_function_data(ea)
         if not func_tinfo: continue
-
+        
         # Store function.
         metadata[function] = {}
-        # eprint(function)
+
         # Get function parameters and return type.
         get_function_info(function, func_tinfo, funcdata)
+        
+        # Try to decompile the function
+        decompiled = decompile_function(ea)
 
         # This improves the function information we
         # get when the decompiler is active.
-        get_function_info_decompiler(ea, function)
-
+        if decompiled:
+            get_function_info_decompiler(ea, function, decompiled)
+        
         # Get indirect call instructions.
         # First run typearmor and then map those to ida output.
         # get_indirect_callsites(ea, function, callsites)
-        callsite_extractor(ea, function)
+        callsite_extractor(ea, function, decompiled)
     # typearmour false negatives.
     # for key, val in callsites.items():
     #     if val[1] == False: print(f"key: {key}")
