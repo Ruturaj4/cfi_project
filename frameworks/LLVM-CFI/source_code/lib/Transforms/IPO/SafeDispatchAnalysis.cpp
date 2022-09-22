@@ -58,17 +58,6 @@ static std::stringstream writeDebugLocToStream(const DebugLoc* Loc) {
     return Stream;
 }
 
-/** Ruturaj: create structures to parse the input file **/
-
-struct Fun {
-public:
-
-};
-
-
-std::unordered_map <std::string, Fun> funs;
-
-
 /** Encodings contains the three relevant encodings */
 struct Encodings {
 public:
@@ -149,9 +138,9 @@ public:
         if (FuncTy->getNumParams() < 8) {
             if (encodeReturnType)
                 Encoding = encodeType(FuncTy->getReturnType(), encodePointers);
-            sdLog::stream() << "Return: " << Encoding << "\n";
+            // sdLog::stream() << "Return: " << Encoding << "\n";
             for (auto *Param : FuncTy->params()) {
-                sdLog::stream() << "param: " << encodeType(Param) << "\n";
+                // sdLog::stream() << "param: " << encodeType(Param) << "\n";
                 Encoding = encodeType(Param) + Encoding * 32;
             }
         }
@@ -163,6 +152,37 @@ public:
         auto EncodingShort = encodeFunction(Type, false);
         auto EncodingPrecise = encodeFunction(Type, true, true);
         return {Encoding, EncodingShort, EncodingPrecise};
+    }
+
+    // Ruturaj: collect each parameter and its encoding.
+    std::array<uint16_t, 7> getParameters(FunctionType *FuncTy) {
+        // Create an array of 7 values and initialize it to zero.
+        std::array<uint16_t, 7> parameters = {0};
+        if (FuncTy->getNumParams() < 8) {
+            int i{0};
+            for (auto *Param : FuncTy->params()) {
+                parameters[i] = encodeType(Param);
+                ++i;
+            }
+        }
+        else {
+            int i{0};
+            for (auto *Param : FuncTy->params()) {
+                parameters[i] = 32;
+                ++i;
+            }
+        }
+        return parameters;
+    }
+
+    // Ruturaj: Collect function return encoding value.
+    uint16_t getReturn(FunctionType *FuncTy) {
+        if (FuncTy->getNumParams() < 8) {
+            return encodeType(FuncTy->getReturnType(), true);
+        }
+        // Return 0 if functions with paramters greater than 8 is detected.
+        // This is a special case.
+        return 32;
     }
 };
 
@@ -243,6 +263,15 @@ private:
     int64_t CallSiteCount = 0;              // counts analysed CallSites
     std::vector<CallSiteInfo> Data{};       // info for every analysed CallSite
 
+    /* Ruturaj: Data structures to store additional function data.
+        This include: calltarget and callsite return type, argument types.
+        TODO: This can possibly be stored in already present "Data" structure.
+    */
+    std::map<std::string, std::array<uint16_t, 7>> FunParams{};
+    std::map<std::string, uint16_t> FunRet{};
+    std::map<std::string, std::array<uint16_t, 7>> CallSiteParams{};
+    std::map<std::string, uint16_t> CallSiteRet{};
+
     // metric results (used for sorting CallSiteInfo)
     std::map<float, std::vector<CallSiteInfo>> MetricVirtual{};
     std::map<float, std::vector<CallSiteInfo>> MetricIndirect{};
@@ -291,9 +320,6 @@ private:
         computeVTableIslands();
         findAllVFunctions();
 
-        // Ruturaj: store input metadata in a map structure
-        storeInput();
-
         // setup callee and callee signature info
         analyseCallees(M);
         // Ruturaj: clone setup callee and callee signature info function
@@ -308,6 +334,8 @@ private:
         applyCallSiteMetric();
         // store the analysis data
         storeData(M);
+        // Ruturaj: store input metadata in a map structure
+        storeAdditionalData(M);
 
         sdLog::stream() << sdLog::newLine << "P7a. Finished running the SDAnalysis pass ..." << "\n";
         sdLog::blankLine();
@@ -318,38 +346,115 @@ private:
 
     void myanalysis(Module &M)
     {
-      sdLog::stream() << "start alt analysis...\n";
-      // print function names
-      // for (auto &F : M) {
-      //   sdLog::stream() << "new function name: " << F.getName() << "\n";
-      //   sdLog::stream() << "no. of params: " << F.getFunctionType()->getNumParams() << "\n";
-      //   // the next goal is to try to change the function names
-      //
-      // }
-      sdLog::stream() << "---------------- ********\n" ;
+        sdLog::stream() << "start alt analysis...\n";
+        // print function names
+        // for (auto &F : M) {
+        //   sdLog::stream() << "new function name: " << F.getName() << "\n";
+        //   sdLog::stream() << "no. of params: " << F.getFunctionType()->getNumParams() << "\n";
+        //   // the next goal is to try to change the function names
+        //
+        // }
+        sdLog::stream() << "---------------- ********\n" ;
     }
 
 
-    /** Ruturaj: store input metadata**/
-    void storeInput()
-    {
-      std::string line;
-      std::ifstream myfile;
-      myfile.open("demo.txt");
-      if (myfile.is_open())
-      {
-        getline(myfile,line);
-        int64_t count = atoi(line.c_str());
-        while (count)
-        {
-          getline (myfile,line);
-          funs[line] = Fun();
-          for (auto& it: funs)
-            sdLog::stream() << "func: \n" << it.first << "\n";
-          --count;
+    /** Ruturaj: store additional metadata**/
+    std::pair<std::string, std::string> getOutputFileName(Module &M) {
+        auto SDOutputMD = M.getNamedMetadata("sd_output");
+        auto SDFilenameMD = M.getNamedMetadata("sd_filename");
+
+        StringRef OutputPath;
+        if (SDOutputMD != nullptr)
+            OutputPath = dyn_cast_or_null<MDString>(SDOutputMD->getOperand(0)->getOperand(0))->getString();
+        else if (SDFilenameMD != nullptr)
+            OutputPath = ("./" + dyn_cast_or_null<MDString>(SDFilenameMD->getOperand(0)->getOperand(0))->getString()).str();
+
+        std::string FunFileName = "./SDAnalysis-Fun";
+        std::string CallsiteFileName = "./SDAnalysis-Callsite";
+        if (OutputPath != "") {
+            FunFileName = (OutputPath + "-Fun").str();
+            CallsiteFileName = (OutputPath + "-Callsite").str();
         }
-      }
-      myfile.close();
+        std::string FunFileNameExtended = (Twine(FunFileName) + ".csv").str();
+        std::string CallsiteFileNameExtended = (Twine(CallsiteFileName) + ".csv").str();
+
+        return {FunFileNameExtended, CallsiteFileNameExtended};
+    }
+
+    void writeHeaderRaw(raw_ostream& Out, bool callSiteHeader = false) {
+        if (callSiteHeader) {
+            Out << "Dwarf";
+        }
+        else {
+            Out << "Function";
+        }
+
+        Out << ",Arg1"
+            << ",Arg2"
+            << ",Arg3"
+            << ",Arg4"
+            << ",Arg5"
+            << ",Arg6"
+            << ",Arg7";
+        
+        Out << ",Return";
+
+        Out << "\n";
+    }
+
+    void writeRawData(raw_fd_ostream& OutfileFun, raw_fd_ostream& OutfileCallsite) {
+        writeHeaderRaw(OutfileFun);
+        writeHeaderRaw(OutfileCallsite, true);
+
+        for (auto it=FunParams.begin(); it!=FunParams.end(); ++it) {
+            OutfileFun << it->first;
+            for (auto& Param : it->second){
+                OutfileFun << "," << Param;
+            }
+            OutfileFun  << "," << FunRet[it->first]
+                        << "\n";
+        }
+
+        OutfileFun.close();
+
+        for (auto it=CallSiteParams.begin(); it!=CallSiteParams.end(); ++it) {
+            OutfileCallsite << it->first;
+            for (auto& Param : it->second){
+                OutfileCallsite << "," << Param;
+            }
+            OutfileCallsite  << "," << CallSiteRet[it->first]
+                        << "\n";
+        }
+
+        OutfileCallsite.close();
+    }
+
+    /** Ruturaj: store additional metadata**/
+    void storeAdditionalData(Module& M)
+    {   
+        if (Data.empty()) {
+            sdLog::stream() << "Nothing to store...\n";
+            return;
+        }
+
+        sdLog::stream() << "Store Additional Data for Module: " << M.getName() << "\n";
+
+        auto FileNames = getOutputFileName(M);
+
+        // Start writing the analysis data.
+        std::error_code ECFun, ECCallsite;
+        raw_fd_ostream OutfileFun(FileNames.first, ECFun, sys::fs::OpenFlags::F_None);
+        raw_fd_ostream OutfileCallsite(FileNames.second, ECCallsite, sys::fs::OpenFlags::F_None);
+        if (ECFun || ECCallsite) {
+            sdLog::errs() << "Failed to write to " << FileNames.first << ", " << FileNames.second << "!\n";
+            return;
+        }
+
+        sdLog::stream() << "Writing function and callsite encoding data to "
+                        << FileNames.first << ", " << FileNames.second << ".\n";
+
+        writeRawData(OutfileFun, OutfileCallsite);
+
     }
 
     /** hierarchy analysis functions */
@@ -602,10 +707,10 @@ private:
             std::string FunctionName = F.getName();
 
             std::string DemangledFunctionName = FunctionName;
-            // Ruturaj: print function names and args
-            sdLog::stream() << DemangledFunctionName << "\n";
-            sdLog::stream() << "Encoding:= Normal:"<<Encode.Normal<<" Short:"<<Encode.Short << " Precise:"<< Encode.Precise << "\n";
-            sdLog::stream() << F.getFunctionType()->getNumParams() << "\n";
+            // Ruturaj: Print function names and args.
+            // sdLog::stream() << DemangledFunctionName << "\n";
+            // sdLog::stream() << "Encoding:= Normal:"<<Encode.Normal<<" Short:"<<Encode.Short << " Precise:"<< Encode.Precise << "\n";
+            // sdLog::stream() << F.getFunctionType()->getNumParams() << "\n";
 
             int Status = 0;
             if (F.getName().startswith("_")) {
@@ -614,6 +719,10 @@ private:
                     DemangledFunctionName = DemangledPair.second;
                 }
             }
+
+            // Ruturaj: Store function parameter encoding list and encoded ret value.
+            FunParams[DemangledFunctionName] = Encode.getParameters(F.getFunctionType());
+            FunRet[DemangledFunctionName] = Encode.getReturn(F.getFunctionType());
 
             AllFunctions.insert(F.getName());
             NumberOfParameters[NumOfParams]++;
@@ -652,15 +761,14 @@ private:
         sdLog::stream() << "\n";
         sdLog::stream() << "Processing indirect CallSites...\n";
         for (auto &F : M) {
-            sdLog::stream() << "Function: " << F.getName() << '\n';
             for(auto &MBB : F) {
                 for (auto &I : MBB) {
                     CallSite Call(&I);
                     // Try to use I as a CallInst or a InvokeInst
                     if (Call.getInstruction()) {
                         if (CallSite(Call).isIndirectCall() && VirtualCallSites.find(Call) == VirtualCallSites.end()) {
-                            sdLog::stream() << "Indirect callsite analysis!\n";
-                            sdLog::stream() << "Number of parameters:" << Call.getFunctionType()->getNumParams() << '\n';
+                            // sdLog::stream() << "Indirect callsite analysis!\n";
+                            // sdLog::stream() << "Number of parameters:" << Call.getFunctionType()->getNumParams() << '\n';
                             CallSiteInfo Info(Call.getFunctionType()->getNumParams(), false);
                             analyseCall(Call, Info);
                             ++countIndirect;
@@ -754,14 +862,21 @@ private:
             Dwarf = Stream.str();
         }
         Info.Dwarf = Dwarf;
+
         // Ruturaj: prints
-        sdLog::stream() << "################################################" << "\n";
-        sdLog::stream() << "Stream: " << Dwarf << "\n";
+        // sdLog::stream() << "################################################" << "\n";
+        // sdLog::stream() << "Stream: " << Dwarf << "\n";
+
         auto NumberOfParam = CallSite.getFunctionType()->getNumParams();
         if (NumberOfParam >= 7)
             NumberOfParam = 7;
 
         auto Encode = Encodings::encode(CallSite.getFunctionType());
+
+        // Ruturaj: Store parameter and type encodings per callsite.
+        CallSiteParams[Dwarf] = Encode.getParameters(CallSite.getFunctionType());
+        CallSiteRet[Dwarf] = Encode.getReturn(CallSite.getFunctionType());
+
         Info.Encoding = Encode;
         Info.TargetSignatureMatches = TargetSignature[Encode.Normal].size();
         Info.ShortTargetSignatureMatches = ShortTargetSignature[Encode.Short].size();
