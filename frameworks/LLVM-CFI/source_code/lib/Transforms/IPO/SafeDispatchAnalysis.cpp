@@ -166,10 +166,8 @@ public:
             }
         }
         else {
-            int i{0};
-            for (auto *Param : FuncTy->params()) {
+            for (int i{0}; i < 7; ++i) {
                 parameters[i] = 32;
-                ++i;
             }
         }
         return parameters;
@@ -265,7 +263,6 @@ private:
 
     /* Ruturaj: Data structures to store additional function data.
         This include: calltarget and callsite return type, argument types.
-        TODO: This can possibly be stored in already present "Data" structure.
     */
     std::map<std::string, std::array<uint16_t, 7>> FunParams{};
     std::map<std::string, uint16_t> FunRet{};
