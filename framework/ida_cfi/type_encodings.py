@@ -1,8 +1,8 @@
 # Copyright (c) University of Kansas and affiliates.
 
-def encode(tif):
-    # type: (idaapi.tinfo) -> int (encoded type)
+import idaapi
 
+def encode(tif: idaapi.tinfo_t) -> int:
     # May use realtype to decide the correct type.
     #typeid = tif.get_realtype()
 

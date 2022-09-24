@@ -131,7 +131,7 @@ def callsite_extractor(ea: int, function: str, decompiled: ida_hexrays.cfuncptr_
     metadata[function]["indirect_calls_hx"] = []
     
     # In case of decompilation failure, fall back to disassembly parsing.
-    if not decompiled:
+    if decompiled is None:
         # bb_interator(ea)
         return
     
@@ -173,7 +173,7 @@ def function_iterator() -> dict:
     eprint("Recovering argument count from typearmor....")
     # get_argument_count_typearmor()
 
-    # ignore_funs = {"_start", "frame_dummy", "deregister_tm_clones", "fini"}
+    ignore_funs = {"_start", "start", "frame_dummy", "deregister_tm_clones", "fini"}
     ida_hexrays.init_hexrays_plugin()
     for ea in idautils.Functions():
         # Ignore function if not in text section.
@@ -184,6 +184,7 @@ def function_iterator() -> dict:
         # Ingore unnecessary funs.
         if function.startswith("."): continue
         if function.startswith("__"): continue
+        if function in ignore_funs: continue
 
         # Retrieve function data.
         func_tinfo, funcdata = retrieve_function_data(ea)
@@ -200,7 +201,7 @@ def function_iterator() -> dict:
 
         # This improves the function information we
         # get when the decompiler is active.
-        if decompiled:
+        if decompiled is not None:
             get_function_info_decompiler(ea, function, decompiled)
         
         # Get indirect call instructions.

@@ -48,6 +48,13 @@ CallSiteCount = 0
 # Info for every analysed CallSite.
 Data = []
 
+# Data structures to store additional function data.
+# This include: calltarget and callsite return type, argument types.
+FunParams = {}
+FunRet = {}
+CallSiteParams = {}
+CallSiteRet = {}
+
 # Metric results (used for sorting CallSiteInfo).
 # TODO: virtual metric.
 MetricIndirect = collections.defaultdict(list)
@@ -71,7 +78,8 @@ class Encodings:
         self.Short = _Short
         self.Precise = _Precise
 
-    @ staticmethod
+
+    @staticmethod
     def encodeFunction(param_list, return_t, encodePointers, encodeReturnType=True):
         # Base encoding.
         Encoding = 32
@@ -88,6 +96,7 @@ class Encodings:
                     Encoding = paratype[0] + Encoding * 32
         return Encoding
 
+
     @classmethod
     def encode(cls, param_list, return_t):
         Encoding = cls.encodeFunction(param_list, return_t, True)
@@ -95,9 +104,35 @@ class Encodings:
         EncodingPrecise = cls.encodeFunction(param_list, return_t, True, True)
         return cls(Encoding, EncodingShort, EncodingPrecise)
 
+
+    @staticmethod
+    def getParameters(param_list):
+        parameters = [0]*7
+        if len(param_list) < 8:
+            for i, param in enumerate(param_list):
+                if param[2][0] == 11:
+                    parameters[i] = param[2][1] + 16
+                else:
+                    parameters[i] = param[2][0]
+        else:
+            for i in range(len(parameters)):
+                parameters[i] = 32
+        return parameters
+
+    @staticmethod
+    def getReturn(param_list, return_t):
+        if len(param_list) < 8:
+            if return_t[0] == 11:
+                return 16 + return_t[1]
+            else:
+                return return_t[0]
+        return 32
+    
+
 def demangle_func_name(mangled_name, clean=True):
     demangle_attr = idc.get_inf_attr(idc.INF_SHORT_DN if clean else idc.INF_LONG_DN)
     return idc.demangle_name(mangled_name, demangle_attr)
+
 
 # Function type matching functions.
 def analyseCallees(metadata: dict) -> None:
@@ -116,6 +151,10 @@ def analyseCallees(metadata: dict) -> None:
         # Demangle the function name.
         demangled_name = demangle_func_name(function)
         demangled_name = demangled_name if demangled_name else function
+        
+        # Store function parameter encoding list and encoded ret value.
+        FunParams[demangled_name] = Encode.getParameters(metadata[function]["parameter_list"])
+        FunRet[demangled_name] = Encode.getReturn(metadata[function]["parameter_list"], metadata[function]["return_t"])
 
         # Fill the data structures.
         AllFunctions.add(function)
@@ -127,6 +166,7 @@ def analyseCallees(metadata: dict) -> None:
 
         # Fill the data structures if the function is virtual.
         # TODO: add this to support c++
+
 
 # Function type.
 def analyseCall(function: str, callsite: tuple, Info: CallSiteInfo) -> None:
@@ -141,6 +181,11 @@ def analyseCall(function: str, callsite: tuple, Info: CallSiteInfo) -> None:
     if NumberOfParam >= 7: NumberOfParam = 7
 
     Encode = Encodings.encode(callsite[2], callsite[1])
+    
+    # Store parameter and type encodings per callsite.
+    CallSiteParams[Info.Dwarf] = Encode.getParameters(callsite[2])
+    CallSiteRet[Info.Dwarf] = Encode.getReturn(callsite[2], callsite[1])
+    
     Info.Encoding = Encode
     Info.TargetSignatureMatches = len(TargetSignature[Encode.Normal])
     Info.ShortTargetSignatureMatches = len(ShortTargetSignature[Encode.Short])
@@ -171,11 +216,12 @@ def processIndirectCallSites(metadata: dict) -> None:
             countIndirect += 1
     eprint(f"[SD] Found indirect CallSites: {countIndirect}")
 
+
 def processVirtualCallSites():
     pass
 
-# Helper Functions.
 
+# Helper Functions.
 def applyCallSiteMetric() -> None:
     for entry in Data:
         if entry.isVirtual:
@@ -216,7 +262,8 @@ def writeHeader(indirectfile, writeDetails=True) -> None:
         writer.writerow(header)
         if writeDetails: writer.writerow(details)
 
-def writeAnalysisData(Data, indirectfile) -> None:
+
+def writeAnalysisData(indirectfile) -> None:
     writeHeader(indirectfile)
     with open(indirectfile, 'a', encoding='UTF8', newline='') as f:
         writer = csv.writer(f)
@@ -224,6 +271,7 @@ def writeAnalysisData(Data, indirectfile) -> None:
             writer.writerow([Info.Dwarf,Info.DisplayName,"","",Info.Params,"","",Info.TargetSignatureMatches, \
             Info.ShortTargetSignatureMatches, Info.NumberOfParamMatches, len(AllFunctions), "", "",\
             "","","",""])
+
 
 def writeMetricIndirect(indirectfilemetric) -> None:
     if not MetricIndirect: return
@@ -259,6 +307,7 @@ def writeMetricIndirect(indirectfilemetric) -> None:
                 i += 1
             if i > 50: break
 
+
 # Write the data in file (along with the metric data).
 # This function can be used to co-relate and then display the data.
 def storeData() -> None:
@@ -272,9 +321,58 @@ def storeData() -> None:
     if not os.path.exists(idaoutput):
         os.makedirs(idaoutput)
     indirectfile = os.path.join(idaoutput, file) + "-Indirect.csv"
-    writeAnalysisData(Data, indirectfile)
+    writeAnalysisData(indirectfile)
     indirectfilemetric = os.path.join(idaoutput, file) + "-Indirect-metric.csv"
     writeMetricIndirect(indirectfilemetric)
+
+
+def writeHeaderRaw(filename, callSiteHeader=False):
+    if callSiteHeader:
+        header = ["Ins"]
+    else:
+        header = ["Function"]
+
+    header.extend(["Arg1", "Arg2", "Arg3", "Arg4", "Arg5", "Arg6", "Arg7", "Return"])
+    
+    with open(filename, 'w', encoding='UTF8', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+
+
+def writeRawData(funFile, callSiteFile):
+    writeHeaderRaw(funFile)
+    writeHeaderRaw(callSiteFile, True)
+    
+    with open(funFile, 'a', encoding='UTF8', newline='') as f:
+        writer = csv.writer(f)
+        for function, params in FunParams.items():
+            row = [function]
+            row.extend(params)
+            row.append(FunRet[function])
+            writer.writerow(row)
+            
+    with open(callSiteFile, 'a', encoding='UTF8', newline='') as f:
+        writer = csv.writer(f)
+        for callSite, params in CallSiteParams.items():
+            row = [callSite]
+            row.extend(params)
+            row.append(CallSiteRet[callSite])
+            writer.writerow(row)
+
+
+def storeAdditionalData():
+    if not Data:
+        eprint("[SD] Nothing to store...")
+        return
+    eprint(f"[SD] Store Additional Data for Module: {ida_nalt.get_input_file_path()}")
+    path, file = os.path.split(ida_nalt.get_input_file_path())
+    idaoutput = os.path.join(path, "IDAoutput")
+    if not os.path.exists(idaoutput):
+        os.makedirs(idaoutput)
+    
+    funFile = os.path.join(idaoutput, file) + "-Fun.csv"
+    callSiteFile = os.path.join(idaoutput, file) + "-Callsite.csv"
+    writeRawData(funFile, callSiteFile)
 
 
 def build_analysis(metadata: dict) -> None:
@@ -296,3 +394,5 @@ def build_analysis(metadata: dict) -> None:
     applyCallSiteMetric()
     # Store the analysis data.
     storeData()
+    # Store input metadata in a map structure.
+    storeAdditionalData()
