@@ -285,27 +285,36 @@ def writeMetricIndirect(indirectfilemetric) -> None:
                 # if Info.Dwarf in ExportedLines: continue
                 # ExportedLines.add(Info.Dwarf)
 
-                vTrust = set()
-                IFCC = set()
-                IFCCSafe = set()
-                Typearmor = set()
-
                 demangled_name = demangle_func_name(Info.FunctionName)
                 demangled_name = demangled_name if demangled_name else Info.FunctionName
 
                 vTrust = PreciseTargetSignature[(demangled_name, Info.Encoding.Precise)]
                 IFCC = TargetSignature[Info.Encoding.Normal]
-                IFCCSafe = ShortTargetSignature[Info.Encoding.Normal]
-
-                # TODO: fix accordingly
-                writer.writerow([Info.Dwarf,Info.DisplayName, "", "", Info.Params, "", "", \
+                IFCCSafe = ShortTargetSignature[Info.Encoding.Short]
+                
+                row = [Info.Dwarf,Info.DisplayName, "", "", Info.Params, "", "", \
                 Info.TargetSignatureMatches, Info.ShortTargetSignatureMatches, Info.NumberOfParamMatches,\
-                len(AllFunctions), "", "", "", "", "", "", \
-                f"vTrust({len(vTrust)})", f"IFCC({len(IFCC)})", f"IFCCSafe({len(IFCCSafe)})", \
-                f"TypeArmor({Info.NumberOfParamMatches})"])
+                len(AllFunctions), "", "", "", "", "", "",]
+                
+                row.append(f"vTrust({len(vTrust)})")
+                row.extend(vTrust)
+                
+                row.append(f"IFCC({len(IFCC)})")
+                row.extend(IFCC)
+                
+                row.append(f"IFCCSafe({len(IFCCSafe)})")
+                row.extend(IFCCSafe)
+                
+                NumberOfParams = Info.Params
+                if NumberOfParams >= 7: NumberOfParams = 7
+                row.append(f"TypeArmor({Info.NumberOfParamMatches})")
+                for j in range(NumberOfParams+1):
+                    row.extend(NumberOfParametersList[j])
+
+                writer.writerow(row)
 
                 i += 1
-            if i > 50: break
+            # if i > 50: break
 
 
 # Write the data in file (along with the metric data).

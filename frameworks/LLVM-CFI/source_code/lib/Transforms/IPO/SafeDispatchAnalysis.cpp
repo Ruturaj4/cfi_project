@@ -16,6 +16,8 @@
 #include "llvm/Transforms/IPO/SafeDispatchLayoutBuilder.h"
 #include "llvm/Transforms/IPO/SafeDispatchLogStream.h"
 #include "llvm/Transforms/IPO/SafeDispatchTools.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
 
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/Path.h>
@@ -308,11 +310,15 @@ private:
     std::array<func_name_set, 8> NumberOfParametersList_virtual{};
 
     bool runOnModule(Module &M) override {
+
+        // Ruturaj: disable function inlining.
+        bool changed = disableInlining(M);
+
         sdLog::blankLine();
         sdLog::stream() << "P7a. Started running the SDAnalysis pass ..." << sdLog::newLine << "\n";
         // setup CHA info
         CHA = &getAnalysis<SDBuildCHA>();
-        // myanalysis(M);
+
         analyseCHA();
         computeVTableIslands();
         findAllVFunctions();
@@ -336,22 +342,29 @@ private:
 
         sdLog::stream() << sdLog::newLine << "P7a. Finished running the SDAnalysis pass ..." << "\n";
         sdLog::blankLine();
-        return false;
+        // Ruturaj: return True as function attribute gets modified.
+        return changed;
     }
 
-    /** Ruturaj: custom function to monitor the analysis **/
+    /** Ruturaj: Disable function inlining **/
 
-    void myanalysis(Module &M)
+    bool disableInlining(Module &M)
     {
-        sdLog::stream() << "start alt analysis...\n";
-        // print function names
-        // for (auto &F : M) {
-        //   sdLog::stream() << "new function name: " << F.getName() << "\n";
-        //   sdLog::stream() << "no. of params: " << F.getFunctionType()->getNumParams() << "\n";
-        //   // the next goal is to try to change the function names
-        //
-        // }
-        sdLog::stream() << "---------------- ********\n" ;
+        bool changed = false;
+        for (llvm::Module::iterator i = M.begin(), e = M.end(); i != e; ++i)
+        {
+            llvm::Function *f = i;
+            if (f->isDeclaration()) continue;
+            AttributeSet attrs;
+            f->removeAttributes(
+                AttributeSet::FunctionIndex, 
+                attrs.addAttribute
+                (M.getContext(), 
+                AttributeSet::FunctionIndex, Attribute::AlwaysInline));
+            f->addFnAttr(Attribute::NoInline);
+            changed = true;
+        }
+        return changed;
     }
 
 
@@ -1090,11 +1103,11 @@ private:
 
                 vTrust = PreciseTargetSignature[preciseFunctionSignature_t(DemangledFunctionName,Info.Encoding.Precise)];
                 IFCC = TargetSignature[Info.Encoding.Normal];
-                IFCCSafe = ShortTargetSignature[Info.Encoding.Normal];
+                IFCCSafe = ShortTargetSignature[Info.Encoding.Short];
 
                 vTrustVirtual = PreciseTargetSignature_virtual[preciseFunctionSignature_t(DemangledFunctionName,Info.Encoding.Precise)];
                 IFCCVirtual = TargetSignature_virtual[Info.Encoding.Normal];
-                IFCCSafeVirtual = ShortTargetSignature_virtual[Info.Encoding.Normal];
+                IFCCSafeVirtual = ShortTargetSignature_virtual[Info.Encoding.Short];
 
                 auto func_and_class = SDBuildCHA::func_and_class_t(Info.FunctionName, Info.PreciseName);
                 ShrinkWrap = VTableSubHierarchyPerFunction[func_and_class];
@@ -1258,7 +1271,7 @@ private:
 
                 vTrust = PreciseTargetSignature[preciseFunctionSignature_t(DemangledFunctionName,Info.Encoding.Precise)];
                 IFCC = TargetSignature[Info.Encoding.Normal];
-                IFCCSafe = ShortTargetSignature[Info.Encoding.Normal];
+                IFCCSafe = ShortTargetSignature[Info.Encoding.Short];
 
 
                 Out << ", vTrust(" << vTrust.size() << "):";
