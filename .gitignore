@@ -36,5 +36,5 @@ frameworks/LLVM-CFI/source_code/include/llvm/Transforms/IPO/*.gch
 # ignore all .o files
 *.o
 
-# ignore notebooks for now
-framework/notebooks/
+# ignore hidden files in notebooks directory
+framework/notebooks/.*
