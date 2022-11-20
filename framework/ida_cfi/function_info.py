@@ -1,9 +1,12 @@
 # Copyright (c) University of Kansas and affiliates.
 
+from pyclbr import Function
 from ida_imports import *
 import type_encodings
 import sys
 import os
+import pandas as pd
+from elftools.elf.elffile import ELFFile
 
 # Store all metadata.
 # function: {metadata}
@@ -168,24 +171,43 @@ def callsite_extractor(ea: int, function: str, decompiled: ida_hexrays.cfuncptr_
     cbv.apply_to(decompiled.body, None)
 
 
+def find_function_whitelist() -> list:
+    path, exe = os.path.split(ida_nalt.get_input_file_path())
+    fun_df = pd.read_csv(os.path.join(path, "SDOutput/") + exe + "-Fun.csv", header=[0])
+    return fun_df.Function.values
+
+
 def function_iterator() -> dict:
     # First recover callsite info from typearmor.
     eprint("Recovering argument count from typearmor....")
     # get_argument_count_typearmor()
-
+    
+    # Get function addresses to filter.
+    fun_whitelist = find_function_whitelist()
     ignore_funs = {"_start", "start", "frame_dummy", "deregister_tm_clones", "fini"}
     ida_hexrays.init_hexrays_plugin()
     for ea in idautils.Functions():
-        # Ignore function if not in text section.
-        # if not idc.get_segm_name(ea) == ".text":
-        #     continue
+        # Filter functions based on the address detected by LLVM-CFI.
+        # if ea not in fun_addr: continue
+        
         function = idc.get_func_name(ea)
+        # eprint(function)
+        # eprint(hex(ea))
+        # Change function names for functions with extern linkage.
+        # This is really hacky way of supporing functions such as stat in perlbench
+        # which get renamed by ida.
+        if idc.get_segm_name(ea) == "extern":
+            codeRefList = list(idautils.CodeRefsTo(ea,1))
+            if codeRefList:
+                function = idc.get_func_name(codeRefList[0])[1:]
         
         # Ingore unnecessary funs.
         if function.startswith("."): continue
         if function.startswith("__"): continue
-        if function in ignore_funs: continue
-
+        # Special check for gcc.
+        if function == "reload_0": function = "reload"
+        elif function not in fun_whitelist: continue
+        
         # Retrieve function data.
         func_tinfo, funcdata = retrieve_function_data(ea)
         if not func_tinfo: continue
