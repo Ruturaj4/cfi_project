@@ -204,9 +204,17 @@ def function_iterator() -> dict:
         # Ingore unnecessary funs.
         if function.startswith("."): continue
         if function.startswith("__"): continue
-        # Special check for gcc.
-        if function == "reload_0": function = "reload"
-        elif function not in fun_whitelist: continue
+        # Special checks for gcc.
+        if "gcc" in ida_nalt.get_input_file_path():
+            if function == "can_schedule_ready_p": function = "can_schedule_ready_p7030"
+            elif function == "schedule_more_p": function = "schedule_more_p7031"
+            elif function == "compute_jump_reg_dependencies": function = "compute_jump_reg_dependencies7034"
+            elif function == "contributes_to_priority": function = "contributes_to_priority7033"
+            elif function == "init_ready_list": function = "init_ready_list7029"
+            elif function == "new_ready": function = "new_ready7032"
+            elif function == "move_by_pieces_0": function = "move_by_pieces"
+            elif function == "reload_0": function = "reload"
+        if function not in fun_whitelist: continue
         
         # Retrieve function data.
         func_tinfo, funcdata = retrieve_function_data(ea)

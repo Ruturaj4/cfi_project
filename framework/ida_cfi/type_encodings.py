@@ -37,7 +37,7 @@ def encode(tif: idaapi.tinfo_t) -> int:
         elif tif.is_float() and tif.get_size() == 4:
             itype = 8
         # double type.
-        elif tif.is_double():
+        elif tif.is_double() and tif.get_size() == 8:
             itype = 9
         # FP80, FP128, PPC_FP128.
         else:
