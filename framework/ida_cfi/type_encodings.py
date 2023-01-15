@@ -26,18 +26,18 @@ def encode(tif: idaapi.tinfo_t) -> int:
         elif tif.is_int32() or tif.get_size() <= 4:
             itype = 5
         # int64, int128.
-        elif tif.is_int64() or tif.get_size() > 4:
+        else:
             itype = 6
     # floating type.
     elif tif.is_floating():
         # half type.
-        if tif.get_size() < 4:
+        if tif.get_size() <= 2:
             itype = 7
         # float type.
-        elif tif.is_float() and tif.get_size() == 4:
+        elif tif.is_float() or tif.get_size() <= 4:
             itype = 8
         # double type.
-        elif tif.is_double() and tif.get_size() == 8:
+        elif tif.is_double() or tif.get_size() <= 8:
             itype = 9
         # FP80, FP128, PPC_FP128.
         else:
