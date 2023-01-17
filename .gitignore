@@ -14,6 +14,11 @@
 
 !frameworks/
 frameworks/*
+!frameworks/binary-CFI
+frameworks/binary-CFI/*
+!frameworks/binary-CFI/BinaryCFI.cpp
+!frameworks/binary-CFI/CMakeLists.txt
+!frameworks/binary-CFI/ItaniumDemangle.cpp
 !frameworks/LLVM-CFI/
 frameworks/LLVM-CFI/*
 !frameworks/LLVM-CFI/source_code/
