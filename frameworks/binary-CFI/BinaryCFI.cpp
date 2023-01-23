@@ -46,6 +46,11 @@ std::pair<std::string, std::string> itaniumDemanglePair(llvm::StringRef, int&);
 // everything in an anonymous namespace.
 namespace {
 
+// Catch the output binary name.
+static cl::opt<std::string>
+OutputFilename("bin", cl::desc("Specify output filename"),
+  cl::value_desc("filename"), cl::init(""));
+
 // Ruturaj: Data structures to store additional function data.
 // This include: calltarget and callsite return type, argument types.
 std::map<std::string, std::array<uint16_t, 7>> FunParams{};
@@ -219,39 +224,51 @@ std::string createDirectory(const std::string& currPath) {
   return currPath+"/SDOutput/";
 }
 
-std::string getOutputBinName(const std::string name)
+std::string getOutputBinName()
 {
-    const char *binPath = getenv(name.c_str());
-    if (!binPath) {
-      errs() << "[BinaryCFI Error] (env set) Environment variable is not set!";
-      return "empty";
+    if (OutputFilename.empty()) {
+      const char *binPath = getenv("BINCFI");
+      if (!binPath) {
+        errs() << "[BinaryCFI Error] (env set) Environment variable is not set!\n";
+        return "";
+      }
+      return std::string(binPath);
     }
-    return std::string(binPath);
+    return OutputFilename.substr(OutputFilename.find_last_of("/") + 1);
 }
 
 /** Ruturaj: store additional metadata**/
-std::pair<std::string, std::string> getOutputFileName(Module &M) {
+std::pair<std::string, std::string> getOutputFileName(Module &M, const std::string key) {
   llvm::SmallString<128> currPath;
   sys::fs::current_path(currPath);
 
-  std::string outputBinName = getOutputBinName("BINCFI");
+  std::string outputBinName = getOutputBinName();
+  if (outputBinName.empty()) {
+    outputBinName = key;
+  }
   std::string OutputPath = createDirectory(std::move(std::string(currPath)));
   
   std::string FunFileName = OutputPath + outputBinName + "-Fun";
   std::string CallsiteFileName = OutputPath + outputBinName + "-Callsite";
 
-  std::string FunFileNameExtended = (Twine(FunFileName) + ".csv").str();
-  std::string CallsiteFileNameExtended = (Twine(CallsiteFileName) + ".csv").str();
+  uint16_t count = 1;
+  while (sys::fs::exists(FunFileName + Twine(count) + ".csv") ||
+        sys::fs::exists(CallsiteFileName + Twine(count) + ".csv")) {
+    ++count;
+  }
+
+  std::string FunFileNameExtended = (FunFileName + Twine(count)+ ".csv").str();
+  std::string CallsiteFileNameExtended = (CallsiteFileName + Twine(count) + ".csv").str();
 
   return {FunFileNameExtended, CallsiteFileNameExtended};
 }
 
 // Ruturaj: store additional function and callsite info.
-void storeAdditionalData(Module& M)
+void storeAdditionalData(Module& M, const std::string key)
 {
   errs() << "Store Additional Data for Module: " << M.getName() << "\n";
 
-  auto FileNames = getOutputFileName(M);
+  auto FileNames = getOutputFileName(M, std::move(key));
 
   // Start writing the analysis data.
   std::error_code ECFun, ECCallsite;
@@ -345,7 +362,7 @@ void visitor(Module &M) {
   errs() << total_funs << '\n';
 
   // Ruturaj: store input metadata in a map structure
-  storeAdditionalData(M);
+  storeAdditionalData(M, std::to_string(total_callsites)+"_"+std::to_string(total_funs));
 }
 
 // New PM implementation
@@ -417,7 +434,7 @@ static RegisterPass<LegacyBinaryCFI>
     X("legacy-binary-cfi",
       "Binary CFI",
       true, // This pass doesn't modify the CFG => true
-      false // This pass is not a pure analysis pass => false
+      true // This pass is not a pure analysis pass => false
     );
 
 static void loadPass(const PassManagerBuilder &Builder, llvm::legacy::PassManagerBase &PM) {
