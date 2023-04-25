@@ -149,8 +149,9 @@ def analyseCallees(metadata: dict) -> None:
         Encode = Encodings.encode(metadata[function]["parameter_list"], metadata[function]["return_t"])
 
         # Demangle the function name.
-        demangled_name = demangle_func_name(function)
-        demangled_name = demangled_name if demangled_name else function
+        # demangled_name = demangle_func_name(function)
+        # demangled_name = demangled_name if demangled_name else function
+        demangled_name = function
         
         # Store function parameter encoding list and encoded ret value.
         FunParams[demangled_name] = Encode.getParameters(metadata[function]["parameter_list"])
@@ -285,8 +286,9 @@ def writeMetricIndirect(indirectfilemetric) -> None:
                 # if Info.Dwarf in ExportedLines: continue
                 # ExportedLines.add(Info.Dwarf)
 
-                demangled_name = demangle_func_name(Info.FunctionName)
-                demangled_name = demangled_name if demangled_name else Info.FunctionName
+                # demangled_name = demangle_func_name(Info.FunctionName)
+                # demangled_name = demangled_name if demangled_name else Info.FunctionName
+                demangled_name = Info.FunctionName
 
                 vTrust = PreciseTargetSignature[(demangled_name, Info.Encoding.Precise)]
                 IFCC = TargetSignature[Info.Encoding.Normal]

@@ -177,6 +177,27 @@ def find_function_whitelist() -> list:
     return fun_df.Function.values
 
 
+def find_function_add_mapping_c() -> dict:
+    path, exe = os.path.split(ida_nalt.get_input_file_path())
+    debug_path = os.path.join(path, "Debug/") + exe
+    add_fun = {}
+    with open(debug_path, "rb") as f:
+        elffile = ELFFile(f)
+        # Extract the dwarf symbol information.
+        dwarfinfo = elffile.get_dwarf_info()
+        # get disassembly
+        for CU in dwarfinfo.iter_CUs():
+            for DIE in CU.iter_DIEs():
+                if DIE.tag == "DW_TAG_subprogram":
+                    if not "DW_AT_low_pc" in DIE.attributes:
+                        continue
+                    if not "DW_AT_name" in DIE.attributes:
+                        continue
+                    add_fun[DIE.attributes["DW_AT_low_pc"].value] = \
+                        DIE.attributes["DW_AT_name"].value.decode("utf-8") 
+    return add_fun
+
+
 def function_iterator() -> dict:
     # First recover callsite info from typearmor.
     eprint("Recovering argument count from typearmor....")
@@ -184,37 +205,57 @@ def function_iterator() -> dict:
     
     # Get function addresses to filter.
     fun_whitelist = find_function_whitelist()
+    # Get Addr to Function mapping retrieved from pyelftools.
+    add_fun = find_function_add_mapping_c()
+    
     ignore_funs = {"_start", "start", "frame_dummy", "deregister_tm_clones", "fini"}
     ida_hexrays.init_hexrays_plugin()
     for ea in idautils.Functions():
         # Filter functions based on the address detected by LLVM-CFI.
         # if ea not in fun_addr: continue
         
-        function = idc.get_func_name(ea)
+        function = idc.get_name(ea)
         # eprint(function)
         # eprint(hex(ea))
+        # continue
         # Change function names for functions with extern linkage.
         # This is really hacky way of supporing functions such as stat in perlbench
         # which get renamed by ida.
         if idc.get_segm_name(ea) == "extern":
             codeRefList = list(idautils.CodeRefsTo(ea,1))
             if codeRefList:
-                function = idc.get_func_name(codeRefList[0])[1:]
+                function = idc.get_name(codeRefList[0])[1:]
         
         # Ingore unnecessary funs.
         if function.startswith("."): continue
         if function.startswith("__"): continue
-        # Special checks for gcc.
+        # Special checks for benchs.
+        if "gobmk" in ida_nalt.get_input_file_path():
+            if function == "__Z12qToBigEndianIjEvT_Pv": function = "gnugo_who_wins"
+            elif function == "_ZN11xercesc_3_212DOMChildNodeC2Ev": function = "sgftree_clear"
+        if "perlbench" in ida_nalt.get_input_file_path():
+            if function == "__Z12qToBigEndianIjEvT_Pv": function = "Perl_rsignal"
         if "gcc" in ida_nalt.get_input_file_path():
-            if function == "can_schedule_ready_p": function = "can_schedule_ready_p7030"
-            elif function == "schedule_more_p": function = "schedule_more_p7031"
-            elif function == "compute_jump_reg_dependencies": function = "compute_jump_reg_dependencies7034"
-            elif function == "contributes_to_priority": function = "contributes_to_priority7033"
-            elif function == "init_ready_list": function = "init_ready_list7029"
-            elif function == "new_ready": function = "new_ready7032"
-            elif function == "move_by_pieces_0": function = "move_by_pieces"
+            if function == "move_by_pieces_0": function = "move_by_pieces"
             elif function == "reload_0": function = "reload"
-        if function not in fun_whitelist: continue
+            elif function == "_ENGINE_free": function = "build_compound_expr"
+            elif function == "_byte_from_pos": function = "byte_from_pos"
+            elif function == "_byte_position": function = "byte_position"
+            elif function == "__ZL16hb_ot_substituteP21hb_ot_shape_context_t": function = "df_finish"
+            elif function == "_ZN4llvm11SmallVectorISt4pairIjPNS_6MDNodeEELj2EEC2Ev": function = "do_import"
+            elif function == "_ENGINE_free_0": function = "do_include_next"
+            elif function == "find_reg_0": function = "find_reg.6316"
+            elif function == "__ZL16hb_ot_substituteP21hb_ot_shape_context_t_0": function = "free_die"
+            elif function == "__Z12qToBigEndianIjEvT_Pv": function = "gen_realpart"
+            elif function == "_loc_checksum": function = "loc_checksum"
+            elif function == "parse_number_0": function = "parse_number.2294"
+            elif function == "reg_dies_0": function = "reg_dies.5267"
+            elif function == "replace_args_0": function = "replace_args"
+        
+        if function not in fun_whitelist:
+            if ea not in add_fun:
+                continue
+            function = add_fun[ea]
         
         # Retrieve function data.
         func_tinfo, funcdata = retrieve_function_data(ea)
